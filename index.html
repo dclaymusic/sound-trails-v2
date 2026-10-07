@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Sound Trails</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1f2937;
+      --muted: #6b7280;
+      --paper: #f8fafc;
+      --panel: #ffffff;
+      --line: #dbe3ec;
+      --playhead: #e85d3f;
+      --button: #27364a;
+      --button-text: #ffffff;
+      --field: #ffffff;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      overscroll-behavior: none;
+    }
+
+    body {
+      padding: max(12px, env(safe-area-inset-top))
+               max(12px, env(safe-area-inset-right))
+               max(12px, env(safe-area-inset-bottom))
+               max(12px, env(safe-area-inset-left));
+    }
+
+    .app {
+      width: min(1200px, 100%);
+      margin: 0 auto;
+      display: grid;
+      gap: 12px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(24px, 3vw, 38px);
+      line-height: 1;
+      letter-spacing: -0.03em;
+      white-space: nowrap;
+    }
+
+    .duration-control {
+      display: flex;
+      align-items: end;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 7px 9px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: rgba(255,255,255,0.72);
+    }
+
+    .duration-title {
+      align-self: center;
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--muted);
+      margin-right: 2px;
+    }
+
+    .field-wrap {
+      display: grid;
+      gap: 3px;
+    }
+
+    .field-wrap label {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .field-wrap input {
+      width: 118px;
+      min-height: 40px;
+      border: 1px solid #cbd5e1;
+      border-radius: 9px;
+      background: var(--field);
+      color: var(--ink);
+      font: inherit;
+      font-size: 16px;
+      font-weight: 650;
+      padding: 7px 9px;
+      outline: none;
+    }
+
+    .field-wrap input:focus {
+      border-color: #64748b;
+      box-shadow: 0 0 0 3px rgba(100,116,139,0.14);
+    }
+
+    .equals {
+      align-self: center;
+      padding-top: 15px;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-left: auto;
+      flex-wrap: wrap;
+    }
+
+    .loop-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 48px;
+      padding: 0 6px;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--ink);
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .loop-control input {
+      width: 22px;
+      height: 22px;
+      margin: 0;
+      accent-color: var(--button);
+      cursor: pointer;
+    }
+
+    .loop-control input:focus-visible {
+      outline: 3px solid #93c5fd;
+      outline-offset: 3px;
+    }
+
+    button {
+      min-height: 48px;
+      min-width: 112px;
+      border: 0;
+      border-radius: 14px;
+      background: var(--button);
+      color: var(--button-text);
+      font: inherit;
+      font-weight: 750;
+      font-size: 17px;
+      padding: 0 18px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+
+    button:active { transform: translateY(1px); }
+    button:focus-visible { outline: 3px solid #93c5fd; outline-offset: 3px; }
+
+    .sound-space {
+      position: relative;
+      width: 100%;
+      min-height: 300px;
+      height: clamp(300px, 68vh, 720px);
+      background: var(--panel);
+      border: 2px solid var(--line);
+      border-radius: 18px;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+      cursor: crosshair;
+    }
+
+    .axis-label {
+      position: absolute;
+      left: 12px;
+      z-index: 2;
+      pointer-events: none;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--muted);
+      background: rgba(255,255,255,0.82);
+      padding: 3px 7px;
+      border-radius: 8px;
+      backdrop-filter: blur(3px);
+    }
+
+    .axis-label.top { top: 10px; }
+    .axis-label.bottom { bottom: 10px; }
+
+    .time-label {
+      position: absolute;
+      bottom: 9px;
+      z-index: 2;
+      pointer-events: none;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+      background: rgba(255,255,255,0.82);
+      padding: 3px 6px;
+      border-radius: 7px;
+    }
+
+    .time-label.start { left: 50px; }
+    .time-label.end { right: 10px; }
+
+    .hint {
+      margin: 0;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .rotate-screen {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: #f8fafc;
+      color: #1f2937;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 32px;
+    }
+
+    .rotate-card {
+      max-width: 360px;
+      display: grid;
+      gap: 14px;
+      justify-items: center;
+    }
+
+    .phone-icon {
+      width: 64px;
+      height: 96px;
+      border: 5px solid currentColor;
+      border-radius: 13px;
+      transform: rotate(90deg);
+      position: relative;
+    }
+
+    .phone-icon::after {
+      content: "";
+      position: absolute;
+      width: 16px;
+      height: 4px;
+      left: 50%;
+      bottom: 5px;
+      transform: translateX(-50%);
+      border-radius: 2px;
+      background: currentColor;
+    }
+
+    .rotate-card strong { font-size: 24px; }
+    .rotate-card span { color: #6b7280; font-size: 16px; line-height: 1.4; }
+
+    @media (max-width: 850px) {
+      .duration-control { order: 3; width: 100%; }
+      .controls { margin-left: auto; }
+      .field-wrap { flex: 1 1 120px; }
+      .field-wrap input { width: 100%; }
+    }
+
+    @media (max-height: 520px) and (orientation: landscape) {
+      body { padding-top: 7px; padding-bottom: 7px; }
+      .app { gap: 7px; }
+      .topbar { gap: 7px; }
+      .sound-space { height: calc(100vh - 122px); min-height: 220px; }
+      h1 { font-size: 22px; }
+      button { min-height: 42px; min-width: 92px; font-size: 15px; }
+      .loop-control { min-height: 42px; font-size: 15px; }
+      .loop-control input { width: 20px; height: 20px; }
+      .duration-control { padding: 4px 7px; width: auto; order: initial; }
+      .duration-title { display: none; }
+      .field-wrap input { width: 92px; min-height: 36px; padding: 5px 7px; }
+      .hint { display: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      button:active { transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="rotate-screen" id="rotateScreen" aria-live="polite">
+    <div class="rotate-card">
+      <div class="phone-icon" aria-hidden="true"></div>
+      <strong>Turn your device sideways</strong>
+      <span>Sound Trails is designed to be used in landscape mode.</span>
+    </div>
+  </div>
+
+  <main class="app" id="app">
+    <div class="topbar">
+      <h1>Sound Trails</h1>
+
+      <div class="duration-control" aria-label="X-axis duration">
+        <span class="duration-title">X-axis span</span>
+        <div class="field-wrap">
+          <label for="secondsInput">Seconds</label>
+          <input id="secondsInput" type="number" inputmode="decimal" min="0.000001" max="3600" step="any" value="10" />
+        </div>
+        <span class="equals">=</span>
+        <div class="field-wrap">
+          <label for="hertzInput">Hertz</label>
+          <input id="hertzInput" type="number" inputmode="decimal" min="0.0002777778" max="1000000" step="any" value="0.1" />
+        </div>
+      </div>
+
+      <div class="controls">
+        <label class="loop-control" for="loopToggle">
+          <input id="loopToggle" type="checkbox" />
+          <span>Loop</span>
+        </label>
+        <button type="button" id="playPause">Play</button>
+        <button type="button" id="clear">Clear</button>
+      </div>
+    </div>
+
+    <section class="sound-space" id="soundSpace" aria-label="Sound drawing area">
+      <canvas id="canvas" aria-label="Draw sound trails here with a finger, stylus, or mouse"></canvas>
+      <div class="axis-label top">1000 Hz</div>
+      <div class="axis-label bottom">100 Hz</div>
+      <div class="time-label start">0 sec</div>
+      <div class="time-label end" id="endTimeLabel">10 sec</div>
+    </section>
+
+    <p class="hint">Draw anywhere. Higher shapes sound higher; lower shapes sound lower. X-axis Hz = 1 ÷ seconds.</p>
+  </main>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+      const soundSpace = document.getElementById("soundSpace");
+      const playPauseButton = document.getElementById("playPause");
+      const clearButton = document.getElementById("clear");
+      const loopToggle = document.getElementById("loopToggle");
+      const rotateScreen = document.getElementById("rotateScreen");
+      const secondsInput = document.getElementById("secondsInput");
+      const hertzInput = document.getElementById("hertzInput");
+      const endTimeLabel = document.getElementById("endTimeLabel");
+
+      const MIN_HZ = 100;
+      const MAX_HZ = 1000;
+      const MAX_VOICES = 10;
+      const MIN_DURATION = 0.000001;
+      const MAX_DURATION = 3600;
+
+      let durationSeconds = 10;
+      let strokes = [];
+      let activeStroke = null;
+      let drawing = false;
+      let pointerId = null;
+
+      let audioCtx = null;
+      let masterGain = null;
+      let voices = [];
+
+      let isPlaying = false;
+      let position = 0;
+      let playStartAudioTime = 0;
+      let animationFrame = null;
+      let loopBufferSource = null;
+      let usingBufferedLoop = false;
+      const MAX_BUFFERED_LOOP_SECONDS = 30;
+
+      let cssWidth = 1;
+      let cssHeight = 1;
+      let dpr = 1;
+
+      function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      }
+
+      function isTouchDevice() {
+        return navigator.maxTouchPoints > 0 || matchMedia("(pointer: coarse)").matches;
+      }
+
+      function updateOrientationGate() {
+        const portraitTouch = isTouchDevice() && window.innerHeight > window.innerWidth;
+        rotateScreen.style.display = portraitTouch ? "flex" : "none";
+        document.body.style.overflow = portraitTouch ? "hidden" : "";
+        if (portraitTouch && isPlaying) pausePlayback();
+      }
+
+      function resizeCanvas() {
+        const rect = canvas.getBoundingClientRect();
+        cssWidth = Math.max(1, rect.width);
+        cssHeight = Math.max(1, rect.height);
+        dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+
+        canvas.width = Math.round(cssWidth * dpr);
+        canvas.height = Math.round(cssHeight * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        drawScene();
+      }
+
+      function frequencyFromY(yNorm) {
+        const clamped = clamp(yNorm, 0, 1);
+        return MAX_HZ - clamped * (MAX_HZ - MIN_HZ);
+      }
+
+      function normalizedPoint(event) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: clamp((event.clientX - rect.left) / rect.width, 0, 1),
+          y: clamp((event.clientY - rect.top) / rect.height, 0, 1)
+        };
+      }
+
+      function addPoint(point) {
+        if (!activeStroke) return;
+        const last = activeStroke[activeStroke.length - 1];
+        if (!last) {
+          activeStroke.push(point);
+          return;
+        }
+        const dx = (point.x - last.x) * cssWidth;
+        const dy = (point.y - last.y) * cssHeight;
+        if (Math.hypot(dx, dy) >= 2) activeStroke.push(point);
+      }
+
+      function beginStroke(event) {
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        event.preventDefault();
+        drawing = true;
+        pointerId = event.pointerId;
+        canvas.setPointerCapture(pointerId);
+        activeStroke = [normalizedPoint(event)];
+        strokes.push(activeStroke);
+        drawScene();
+      }
+
+      function moveStroke(event) {
+        if (!drawing || event.pointerId !== pointerId) return;
+        event.preventDefault();
+        addPoint(normalizedPoint(event));
+        drawScene();
+      }
+
+      function endStroke(event) {
+        if (!drawing || event.pointerId !== pointerId) return;
+        event.preventDefault();
+        addPoint(normalizedPoint(event));
+        drawing = false;
+        pointerId = null;
+
+        if (activeStroke && activeStroke.length === 1) {
+          const p = activeStroke[0];
+          activeStroke.push({ x: Math.min(1, p.x + 0.001), y: p.y });
+        }
+
+        activeStroke = null;
+        drawScene();
+      }
+
+      function drawGrid() {
+        ctx.save();
+        ctx.strokeStyle = "rgba(31, 41, 55, 0.08)";
+        ctx.lineWidth = 1;
+
+        for (let i = 1; i < 10; i++) {
+          const x = (i / 10) * cssWidth;
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, cssHeight);
+          ctx.stroke();
+        }
+
+        for (let i = 1; i < 9; i++) {
+          const y = (i / 9) * cssHeight;
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(cssWidth, y);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function drawStrokes() {
+        ctx.save();
+        ctx.strokeStyle = "#1f2937";
+        ctx.fillStyle = "#1f2937";
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.lineWidth = Math.max(4, Math.min(9, cssHeight * 0.012));
+
+        for (const stroke of strokes) {
+          if (!stroke.length) continue;
+          ctx.beginPath();
+          ctx.moveTo(stroke[0].x * cssWidth, stroke[0].y * cssHeight);
+          for (let i = 1; i < stroke.length; i++) {
+            ctx.lineTo(stroke[i].x * cssWidth, stroke[i].y * cssHeight);
+          }
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function drawPlayhead() {
+        if (!isPlaying && position <= 0) return;
+        const x = position * cssWidth;
+
+        ctx.save();
+        ctx.fillStyle = "rgba(232, 93, 63, 0.12)";
+        ctx.fillRect(Math.max(0, x - 10), 0, 20, cssHeight);
+        ctx.strokeStyle = "#e85d3f";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, cssHeight);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawScene() {
+        ctx.clearRect(0, 0, cssWidth, cssHeight);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, cssWidth, cssHeight);
+        drawGrid();
+        drawStrokes();
+        drawPlayhead();
+      }
+
+      function intersectionsAtX(xNorm) {
+        const ys = [];
+        const xTolerance = 0.0018;
+
+        for (const stroke of strokes) {
+          if (stroke.length < 2) continue;
+
+          for (let i = 1; i < stroke.length; i++) {
+            const a = stroke[i - 1];
+            const b = stroke[i];
+            const minX = Math.min(a.x, b.x);
+            const maxX = Math.max(a.x, b.x);
+
+            if (xNorm < minX - xTolerance || xNorm > maxX + xTolerance) continue;
+
+            const dx = b.x - a.x;
+            if (Math.abs(dx) < 0.00015) {
+              if (Math.abs(xNorm - a.x) <= xTolerance) ys.push((a.y + b.y) / 2);
+              continue;
+            }
+
+            const t = (xNorm - a.x) / dx;
+            if (t >= 0 && t <= 1) ys.push(a.y + (b.y - a.y) * t);
+          }
+        }
+
+        ys.sort((a, b) => a - b);
+        const deduped = [];
+        const minSeparation = 0.018;
+        for (const y of ys) {
+          if (!deduped.length || Math.abs(y - deduped[deduped.length - 1]) > minSeparation) {
+            deduped.push(y);
+          }
+        }
+
+        if (deduped.length <= MAX_VOICES) return deduped;
+
+        const sampled = [];
+        for (let i = 0; i < MAX_VOICES; i++) {
+          const index = Math.round(i * (deduped.length - 1) / (MAX_VOICES - 1));
+          sampled.push(deduped[index]);
+        }
+        return sampled;
+      }
+
+      async function ensureAudio() {
+        if (!audioCtx) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (!AudioContextClass) return false;
+
+          audioCtx = new AudioContextClass();
+          masterGain = audioCtx.createGain();
+          masterGain.gain.value = 0.18;
+          masterGain.connect(audioCtx.destination);
+
+          for (let i = 0; i < MAX_VOICES; i++) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = "sine";
+            osc.frequency.value = 440;
+            gain.gain.value = 0;
+            osc.connect(gain);
+            gain.connect(masterGain);
+            osc.start();
+            voices.push({ osc, gain });
+          }
+        }
+
+        if (audioCtx.state === "suspended") await audioCtx.resume();
+        return true;
+      }
+
+      function stopBufferedLoop() {
+        if (loopBufferSource) {
+          try { loopBufferSource.stop(); } catch (_) {}
+          try { loopBufferSource.disconnect(); } catch (_) {}
+          loopBufferSource = null;
+        }
+        usingBufferedLoop = false;
+      }
+
+      function buildLoopBuffer() {
+        if (!audioCtx) return null;
+
+        const sampleRate = audioCtx.sampleRate;
+        const sampleCount = Math.max(1, Math.round(durationSeconds * sampleRate));
+        const buffer = audioCtx.createBuffer(1, sampleCount, sampleRate);
+        const data = buffer.getChannelData(0);
+
+        // Track the drawing at a moderate spatial resolution, then synthesize
+        // the actual audio at sample rate. This keeps very short loops accurate
+        // without doing expensive geometry calculations for every audio sample.
+        const frameCount = clamp(Math.round(Math.max(220, cssWidth)), 220, 900);
+        const trackers = Array.from({ length: MAX_VOICES }, () => ({
+          active: false,
+          currentFreq: null
+        }));
+        const frequencyFrames = Array.from({ length: MAX_VOICES }, () => new Float32Array(frameCount));
+        const gainFrames = Array.from({ length: MAX_VOICES }, () => new Float32Array(frameCount));
+
+        for (let frame = 0; frame < frameCount; frame++) {
+          const x = frameCount > 1 ? frame / (frameCount - 1) : 0;
+          const frequencies = intersectionsAtX(x).map(frequencyFromY);
+          const assignments = assignFrequencies(trackers, frequencies);
+          const level = frequencies.length ? Math.min(0.60, 0.95 / Math.sqrt(frequencies.length)) : 0;
+
+          for (let v = 0; v < MAX_VOICES; v++) {
+            const target = assignments.get(v);
+            if (target !== undefined) {
+              frequencyFrames[v][frame] = target;
+              gainFrames[v][frame] = level;
+              trackers[v].active = true;
+              trackers[v].currentFreq = target;
+            } else {
+              frequencyFrames[v][frame] = 0;
+              gainFrames[v][frame] = 0;
+              trackers[v].active = false;
+            }
+          }
+        }
+
+        const phases = new Float64Array(MAX_VOICES);
+        const twoPi = Math.PI * 2;
+
+        for (let n = 0; n < sampleCount; n++) {
+          const framePos = sampleCount > 1
+            ? (n / (sampleCount - 1)) * (frameCount - 1)
+            : 0;
+          const f0 = Math.floor(framePos);
+          const f1 = Math.min(frameCount - 1, f0 + 1);
+          const mix = framePos - f0;
+
+          let sample = 0;
+          let activeCount = 0;
+
+          for (let v = 0; v < MAX_VOICES; v++) {
+            const freq0 = frequencyFrames[v][f0];
+            const freq1 = frequencyFrames[v][f1];
+            const gain0 = gainFrames[v][f0];
+            const gain1 = gainFrames[v][f1];
+
+            let freq = freq0 + (freq1 - freq0) * mix;
+            const gain = gain0 + (gain1 - gain0) * mix;
+
+            if (freq > 0 && gain > 0) {
+              phases[v] += twoPi * freq / sampleRate;
+              if (phases[v] > twoPi) phases[v] %= twoPi;
+              sample += Math.sin(phases[v]) * gain;
+              activeCount++;
+            }
+          }
+
+          if (activeCount > 0) {
+            // Extra headroom for dense polyphony.
+            sample /= Math.sqrt(activeCount);
+          }
+          data[n] = Math.max(-0.95, Math.min(0.95, sample));
+        }
+
+        // Tiny circular edge blend to soften the loop seam without materially
+        // changing very short durations.
+        if (sampleCount >= 8) {
+          const edgeSamples = Math.max(
+            2,
+            Math.min(
+              Math.floor(sampleRate * 0.0015),
+              Math.floor(sampleCount * 0.12)
+            )
+          );
+
+          for (let i = 0; i < edgeSamples; i++) {
+            const a = i / edgeSamples;
+            const startIndex = i;
+            const endIndex = sampleCount - edgeSamples + i;
+            const start = data[startIndex];
+            const end = data[endIndex];
+            const blended = end * (1 - a) + start * a;
+            data[startIndex] = blended;
+            data[endIndex] = blended;
+          }
+        }
+
+        return buffer;
+      }
+
+      function startBufferedLoop(fromPosition) {
+        stopBufferedLoop();
+
+        const buffer = buildLoopBuffer();
+        if (!buffer) return false;
+
+        const source = audioCtx.createBufferSource();
+        source.buffer = buffer;
+        source.loop = true;
+        source.connect(masterGain);
+
+        const offset = clamp(fromPosition, 0, 0.999999) * durationSeconds;
+        const startAt = audioCtx.currentTime + 0.012;
+        source.start(startAt, offset);
+
+        loopBufferSource = source;
+        usingBufferedLoop = true;
+        playStartAudioTime = startAt - fromPosition * durationSeconds;
+        return true;
+      }
+
+      function cancelScheduledAudio(fade = true) {
+        stopBufferedLoop();
+        if (!audioCtx) return;
+        const now = audioCtx.currentTime;
+        for (const voice of voices) {
+          voice.osc.frequency.cancelScheduledValues(now);
+          voice.gain.gain.cancelScheduledValues(now);
+          const current = Math.max(0, voice.gain.gain.value);
+          voice.gain.gain.setValueAtTime(current, now);
+          if (fade) {
+            voice.gain.gain.linearRampToValueAtTime(0, now + 0.015);
+          } else {
+            voice.gain.gain.setValueAtTime(0, now);
+          }
+        }
+      }
+
+      function pitchDistance(a, b) {
+        return Math.abs(12 * Math.log2(a / b));
+      }
+
+      function assignFrequencies(trackers, frequencies) {
+        const assignments = new Map();
+        const remainingVoices = new Set(trackers.map((_, i) => i));
+        const remainingPitches = new Set(frequencies.map((_, i) => i));
+
+        while (true) {
+          let bestVoice = -1;
+          let bestPitch = -1;
+          let bestDistance = Infinity;
+
+          for (const vi of remainingVoices) {
+            const tracker = trackers[vi];
+            if (!tracker.active || !tracker.currentFreq) continue;
+
+            for (const pi of remainingPitches) {
+              const distance = pitchDistance(tracker.currentFreq, frequencies[pi]);
+              if (distance < bestDistance) {
+                bestDistance = distance;
+                bestVoice = vi;
+                bestPitch = pi;
+              }
+            }
+          }
+
+          if (bestVoice < 0 || bestPitch < 0) break;
+          assignments.set(bestVoice, frequencies[bestPitch]);
+          remainingVoices.delete(bestVoice);
+          remainingPitches.delete(bestPitch);
+        }
+
+        for (const pi of remainingPitches) {
+          const vi = remainingVoices.values().next().value;
+          if (vi === undefined) break;
+          assignments.set(vi, frequencies[pi]);
+          remainingVoices.delete(vi);
+        }
+
+        return assignments;
+      }
+
+      function schedulePlayback(fromPosition) {
+        if (!audioCtx) return;
+
+        cancelScheduledAudio(false);
+
+        const now = audioCtx.currentTime + 0.012;
+        const remainingDuration = durationSeconds * (1 - fromPosition);
+        const sampleCount = clamp(Math.round(Math.max(180, cssWidth * 0.75)), 180, 700);
+        const trackers = Array.from({ length: MAX_VOICES }, () => ({ active: false, currentFreq: null }));
+        const attack = clamp(durationSeconds * 0.003, 0.00005, 0.012);
+        const release = clamp(durationSeconds * 0.004, 0.00005, 0.016);
+
+        for (let v = 0; v < MAX_VOICES; v++) {
+          voices[v].gain.gain.setValueAtTime(0, now);
+        }
+
+        for (let s = 0; s <= sampleCount; s++) {
+          const local = s / sampleCount;
+          const x = fromPosition + (1 - fromPosition) * local;
+          const eventTime = now + remainingDuration * local;
+          const frequencies = intersectionsAtX(x).map(frequencyFromY);
+          const assignments = assignFrequencies(trackers, frequencies);
+          const voiceLevel = frequencies.length ? Math.min(0.115, 0.20 / Math.sqrt(frequencies.length)) : 0;
+
+          for (let v = 0; v < MAX_VOICES; v++) {
+            const target = assignments.get(v);
+            const voice = voices[v];
+            const tracker = trackers[v];
+
+            if (target !== undefined) {
+              if (!tracker.active) {
+                voice.osc.frequency.setValueAtTime(target, eventTime);
+                voice.gain.gain.setValueAtTime(0, eventTime);
+                voice.gain.gain.linearRampToValueAtTime(voiceLevel, eventTime + attack);
+              } else {
+                voice.osc.frequency.linearRampToValueAtTime(target, eventTime);
+                voice.gain.gain.linearRampToValueAtTime(voiceLevel, eventTime);
+              }
+              tracker.active = true;
+              tracker.currentFreq = target;
+            } else {
+              if (tracker.active) {
+                voice.gain.gain.linearRampToValueAtTime(0, eventTime + release);
+              } else {
+                voice.gain.gain.setValueAtTime(0, eventTime);
+              }
+              tracker.active = false;
+            }
+          }
+        }
+
+        const endTime = now + remainingDuration;
+        for (const voice of voices) {
+          voice.gain.gain.linearRampToValueAtTime(0, endTime + release);
+        }
+
+        playStartAudioTime = now - fromPosition * durationSeconds;
+      }
+
+      function animationLoop() {
+        if (!isPlaying || !audioCtx) return;
+
+        const elapsed = Math.max(0, audioCtx.currentTime - playStartAudioTime);
+
+        if (loopToggle.checked) {
+          position = durationSeconds > 0
+            ? (elapsed % durationSeconds) / durationSeconds
+            : 0;
+
+          // For long loops we use the normal scheduler and queue the next pass
+          // when the current pass finishes. Short loops use an AudioBufferSource
+          // with loop=true, so no screen-refresh timing is involved.
+          if (!usingBufferedLoop && elapsed >= durationSeconds) {
+            position = 0;
+            schedulePlayback(0);
+          }
+
+          drawScene();
+          animationFrame = requestAnimationFrame(animationLoop);
+          return;
+        }
+
+        position = clamp(elapsed / durationSeconds, 0, 1);
+        drawScene();
+
+        if (position >= 1) {
+          isPlaying = false;
+          playPauseButton.textContent = "Play";
+          cancelScheduledAudio(true);
+          position = 0;
+          setTimeout(drawScene, 30);
+          return;
+        }
+
+        animationFrame = requestAnimationFrame(animationLoop);
+      }
+
+      async function startPlayback() {
+        const ok = await ensureAudio();
+        if (!ok) return;
+        if (position >= 1) position = 0;
+
+        isPlaying = true;
+        playPauseButton.textContent = "Pause";
+
+        if (loopToggle.checked && durationSeconds <= MAX_BUFFERED_LOOP_SECONDS) {
+          startBufferedLoop(position);
+        } else {
+          schedulePlayback(position);
+        }
+
+        cancelAnimationFrame(animationFrame);
+        animationFrame = requestAnimationFrame(animationLoop);
+      }
+
+      function pausePlayback() {
+        if (!isPlaying) return;
+        isPlaying = false;
+        playPauseButton.textContent = "Play";
+        cancelAnimationFrame(animationFrame);
+        animationFrame = null;
+        cancelScheduledAudio(true);
+        drawScene();
+      }
+
+      function clearAll() {
+        pausePlayback();
+        strokes = [];
+        activeStroke = null;
+        drawing = false;
+        pointerId = null;
+        position = 0;
+        cancelScheduledAudio(false);
+        drawScene();
+      }
+
+      function formatNumber(value) {
+        if (!Number.isFinite(value)) return "";
+        if (value >= 1000) return String(Number(value.toFixed(3)));
+        if (value >= 1) return String(Number(value.toFixed(6)));
+        if (value >= 0.001) return String(Number(value.toFixed(9)));
+        return value.toPrecision(6).replace(/(?:\.0+|(?:(\.\d*?[1-9]))0+)e/, "$1e");
+      }
+
+      function formatDurationLabel(value) {
+        if (value >= 1) return `${Number(value.toFixed(4))} sec`;
+        if (value >= 0.001) return `${Number(value.toFixed(6))} sec`;
+        return `${value.toPrecision(4)} sec`;
+      }
+
+      function applyDuration(seconds, source) {
+        if (!Number.isFinite(seconds) || seconds <= 0) return;
+        seconds = clamp(seconds, MIN_DURATION, MAX_DURATION);
+
+        if (isPlaying) pausePlayback();
+        position = 0;
+        durationSeconds = seconds;
+
+        const hz = 1 / durationSeconds;
+        if (source !== "seconds") secondsInput.value = formatNumber(durationSeconds);
+        if (source !== "hertz") hertzInput.value = formatNumber(hz);
+        endTimeLabel.textContent = formatDurationLabel(durationSeconds);
+        drawScene();
+      }
+
+      function syncFromSeconds() {
+        const seconds = Number(secondsInput.value);
+        if (!Number.isFinite(seconds) || seconds <= 0) return;
+        applyDuration(seconds, "seconds");
+        hertzInput.value = formatNumber(1 / durationSeconds);
+      }
+
+      function syncFromHertz() {
+        const hz = Number(hertzInput.value);
+        if (!Number.isFinite(hz) || hz <= 0) return;
+        applyDuration(1 / hz, "hertz");
+        secondsInput.value = formatNumber(durationSeconds);
+      }
+
+      secondsInput.addEventListener("input", syncFromSeconds);
+      hertzInput.addEventListener("input", syncFromHertz);
+      secondsInput.addEventListener("change", syncFromSeconds);
+      hertzInput.addEventListener("change", syncFromHertz);
+
+      playPauseButton.addEventListener("click", () => {
+        if (isPlaying) pausePlayback();
+        else startPlayback();
+      });
+
+      clearButton.addEventListener("click", clearAll);
+
+      loopToggle.addEventListener("change", async () => {
+        if (!isPlaying) return;
+
+        const currentPosition = position;
+        pausePlayback();
+        position = currentPosition;
+        await startPlayback();
+      });
+
+      canvas.addEventListener("pointerdown", beginStroke);
+      canvas.addEventListener("pointermove", moveStroke);
+      canvas.addEventListener("pointerup", endStroke);
+      canvas.addEventListener("pointercancel", endStroke);
+
+      window.addEventListener("resize", () => {
+        updateOrientationGate();
+        resizeCanvas();
+      });
+
+      window.addEventListener("orientationchange", () => {
+        setTimeout(() => {
+          updateOrientationGate();
+          resizeCanvas();
+        }, 150);
+      });
+
+      if ("ResizeObserver" in window) {
+        new ResizeObserver(resizeCanvas).observe(soundSpace);
+      }
+
+      updateOrientationGate();
+      resizeCanvas();
+      applyDuration(10, "seconds");
+    })();
+  </script>
+</body>
+</html>
